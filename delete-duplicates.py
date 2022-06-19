@@ -56,8 +56,9 @@ def get_chunks(file, chunk_size=1024) -> str:
         yield chunk
 
 
-def get_hash(file_name, first_chunk: bool = False, chunk_size: int = 1024):
-    hash_obj = hashlib.sha512()
+def get_hash(file_name, hash_alg: str = 'sha512', first_chunk: bool = False, chunk_size: int = 1024) -> bytes:
+    hash_obj = hashlib.new(hash_alg.lower())
+
     with open(file_name, 'rb') as file:
         if first_chunk:
             hash_obj.update(file.read(chunk_size))
@@ -71,10 +72,12 @@ def find_duplicates(paths: list[str]) -> None:
     config = configparser.ConfigParser()
     config.read('search_rules.ini')
 
+    recursive = bool(config.get('General', 'Recursive'))
+    hash_alg = config.get('General', 'HashAlgorithm')
+
     file_list = list()
-    print('Retrieving all files recursively...')
+    print('Retrieving all files {}'.format('recursively' if recursive else ''))
     for path in paths:
-        recursive = bool(config.getboolean('General', 'Recursive'))
         excluded_dirs = [normpath(path) for path in json.loads(config.get('Filter', 'ExcludedDirectories'))]
         for dirpath, dirname, filenames in os.walk(path, topdown=True):
             dirname[:] = [d for d in dirname if join(dirpath, d) not in excluded_dirs]
@@ -95,7 +98,7 @@ def find_duplicates(paths: list[str]) -> None:
 
         # Create dict of each file size with a list of files having that size
         size_dict = defaultdict(list)
-        print('Getting file sizes...')
+        print('Getting file sizes')
         for file_path in file_list:
             try:
                 file_size = getsize(realpath(file_path))
@@ -119,8 +122,12 @@ def find_duplicates(paths: list[str]) -> None:
                 continue
 
         small_hash_dict = defaultdict(list)
-        chunk_size = config.getint('General', 'ChunkSize')
-        print('Checking first 1024 bytes...')
+        try:
+            chunk_size = int(config.get('General', 'ChunkSize'))
+        except ValueError:
+            print('Invalid chunk size, must specify a positive integer')
+            return
+        print('Checking first {} bytes'.format(chunk_size))
         counter = 0
         for size, file_list in size_dict.items():
             if len(file_list) < 2:
@@ -129,11 +136,15 @@ def find_duplicates(paths: list[str]) -> None:
             for file_path in file_list:
                 counter += 1
                 try:
-                    chunk_hash = get_hash(file_path, first_chunk=True, chunk_size=chunk_size)
+                    chunk_hash = get_hash(file_path, hash_alg=hash_alg, first_chunk=True, chunk_size=chunk_size)
                     small_hash_dict[(chunk_hash, size)].append(file_path)
                 except OSError:
                     print('Unable to access file: ' + file_path)
                     continue
+                except ValueError as e:
+                    print(e)
+                    print('Invalid hash algorithm specified')
+                    return
         print('{} files with identical sizes'.format(counter))
 
         hash_dict = dict()
@@ -144,7 +155,7 @@ def find_duplicates(paths: list[str]) -> None:
 
             for file_path in file_list:
                 try:
-                    full_hash = get_hash(file_path, chunk_size=chunk_size)
+                    full_hash = get_hash(file_path, hash_alg=hash_alg, chunk_size=chunk_size)
                     if full_hash in hash_dict.keys():
                         file_path = relpath(file_path, start=path)
                         duplicate = relpath(hash_dict[full_hash], start=path)
@@ -154,6 +165,10 @@ def find_duplicates(paths: list[str]) -> None:
                 except OSError:
                     print('Unable to access file: ' + file_path)
                     continue
+                except ValueError as e:
+                    print(e)
+                    print('Invalid hash algorithm specified')
+                    return
 
 
 def main():
