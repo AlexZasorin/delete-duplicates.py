@@ -6,7 +6,7 @@ import math
 import os
 import sys
 from collections import defaultdict
-from os.path import join, getsize, realpath, relpath, abspath, normpath
+from os.path import join, getsize, realpath, relpath, normpath
 
 
 class FileSizeUnit(enum.Enum):
@@ -48,7 +48,7 @@ def convert_to_bytes(size: float, unit: FileSizeUnit) -> int:
         return int(size)
 
 
-def get_chunks(file, chunk_size=1024):
+def get_chunks(file, chunk_size=1024) -> str:
     while True:
         chunk = file.read(chunk_size)
         if not chunk:
@@ -67,7 +67,7 @@ def get_hash(file_name, first_chunk: bool = False, chunk_size: int = 1024):
     return hash_obj.digest()
 
 
-def find_duplicates(paths):
+def find_duplicates(paths: list[str]) -> None:
     config = configparser.ConfigParser()
     config.read('search_rules.ini')
 
@@ -137,7 +137,7 @@ def find_duplicates(paths):
         print('{} files with identical sizes'.format(counter))
 
         hash_dict = dict()
-        print('Calculating full hashes...')
+        print('Calculating full hashes')
         for (_, _), file_list in small_hash_dict.items():
             if len(file_list) < 2:
                 continue
